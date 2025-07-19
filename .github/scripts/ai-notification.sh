@@ -73,46 +73,47 @@ if [ -z "$FILES_CHANGED" ]; then
 fi
 
 # 构建AI提示词
-AI_PROMPT="你是MoonTV项目的技术更新分析专家。MoonTV是一个基于Next.js 14的现代化影视聚合播放器，支持多源搜索、在线播放、收藏同步等功能。
+AI_PROMPT="请分析MoonTV项目的代码变更并生成用户友好的更新说明。
 
-项目背景：
-- 项目名称：MoonTV
+## 项目背景
+MoonTV是一个基于Next.js 14的现代化影视聚合播放器：
 - 技术栈：Next.js 14 + TypeScript + Tailwind CSS
 - 主要功能：影视聚合搜索、在线播放、数据同步
 - 部署平台：Vercel、Docker、Cloudflare
 
-本次变更概览：
+## 本次变更信息
 - 数据来源：${DATA_SOURCE}
 - 提交数量：${COMMIT_COUNT}个
 - 变更文件：${FILES_COUNT}个
 
-详细提交记录：
+## 提交记录
 ${FORMATTED_COMMITS}
 
-文件变更统计：
+## 文件变更统计
 ${DETAILED_STATS}
 
-请按以下JSON格式输出分析结果：
+## 输出要求
+请严格按照以下JSON格式输出分析结果，不要包含任何其他内容：
+
 {
   \"details\": [
-    \"针对每个重要变更的详细说明，突出技术改进点\",
-    \"另一个变更的详细说明\"
+    \"变更1的详细技术说明\",
+    \"变更2的详细技术说明\"
   ],
   \"user_impact\": [
-    \"对用户体验的具体影响1\",
-    \"对用户体验的具体影响2\"
+    \"对用户的具体影响1\",
+    \"对用户的具体影响2\"
   ],
-  \"summary\": \"将所有变更整合为2-3句话的总体描述\"
+  \"summary\": \"整体变更的简要总结\"
 }
 
-要求：
-1. 使用中文回复，语言简洁专业
-2. details数组：每个重要变更一条，说明技术改进
-3. user_impact数组：每个用户可感知的改善一条
-4. summary：整体总结，突出本次更新的核心价值
-5. 避免过于技术化的术语，普通用户能理解
-6. 如果是依赖更新，重点说明安全性或性能提升
-7. 如果是UI/功能改进，说明具体的用户体验提升"
+注意事项：
+- 使用中文回复
+- details：每个重要变更一条，说明技术改进
+- user_impact：每个用户可感知的改善一条
+- summary：2-3句话的总体描述
+- 避免过于技术化的术语
+- 输出必须是有效的JSON格式"
 
 # 调用AI API（如果配置了）
 if [ -n "$AI_API_KEY" ]; then
@@ -124,7 +125,7 @@ if [ -n "$AI_API_KEY" ]; then
   # 调试：显示提示词长度
   echo "🔍 AI提示词长度: $(echo "$AI_PROMPT" | wc -c) 字符"
 
-  # 构建API请求
+  # 构建API请求 - 针对Gemini 2.5 Pro thinking优化
   API_REQUEST=$(jq -n \
     --arg model "$AI_MODEL" \
     --arg prompt "$AI_PROMPT" \
@@ -133,15 +134,15 @@ if [ -n "$AI_API_KEY" ]; then
       messages: [
         {
           role: "system",
-          content: "你是一个专业的软件更新分析师，擅长将技术变更转换为用户友好的说明。"
+          content: "你是一个专业的软件更新分析师，擅长将技术变更转换为用户友好的说明。请仔细分析提供的代码变更信息，生成详细且准确的JSON格式分析结果。"
         },
         {
           role: "user",
           content: $prompt
         }
       ],
-      max_tokens: 800,
-      temperature: 0.7
+      max_tokens: 20000,
+      temperature: 0.3
     }')
 
   # 调试：检查API请求是否构建成功
@@ -167,16 +168,26 @@ if [ -n "$AI_API_KEY" ]; then
   AI_CONTENT=$(echo "$AI_RESPONSE" | \
     jq -r '.choices[0].message.content' 2>/dev/null || echo "")
 
-  if [ -n "$AI_CONTENT" ] && [ "$AI_CONTENT" != "null" ]; then
+  # 检查finish_reason
+  FINISH_REASON=$(echo "$AI_RESPONSE" | jq -r '.choices[0].finish_reason' 2>/dev/null || echo "")
+  echo "🔍 AI完成原因: $FINISH_REASON"
+
+  if [ -n "$AI_CONTENT" ] && [ "$AI_CONTENT" != "null" ] && [ "$AI_CONTENT" != "" ]; then
     echo "✅ AI分析成功"
+    echo "📝 AI响应长度: $(echo "$AI_CONTENT" | wc -c) 字符"
   else
-    echo "❌ AI分析失败，API响应异常"
+    echo "❌ AI分析失败，内容为空"
     echo "完整API响应: $AI_RESPONSE"
 
     # 检查是否有错误信息
     ERROR_MSG=$(echo "$AI_RESPONSE" | jq -r '.error.message' 2>/dev/null || echo "")
     if [ -n "$ERROR_MSG" ] && [ "$ERROR_MSG" != "null" ]; then
       echo "API错误信息: $ERROR_MSG"
+    fi
+
+    # 检查是否是因为长度限制
+    if [ "$FINISH_REASON" = "length" ]; then
+      echo "⚠️ 响应因长度限制被截断，但内容为空，可能是模型配置问题"
     fi
 
     exit 1
