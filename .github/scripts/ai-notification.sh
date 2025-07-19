@@ -4,12 +4,14 @@ set -e
 
 echo "🔍 开始检测代码变更..."
 
-# 检测6小时内的变更
-SINCE_TIME=$(date -u -d "6 hours ago" --iso-8601)
-CURRENT_TIME=$(date -u --iso-8601)
-echo "🕐 检测时间范围: $SINCE_TIME 至 $CURRENT_TIME (UTC)"
-echo "🌍 当前时区: $(date '+%Z %z')"
-echo "🔍 使用UTC时间进行检测以避免时区问题"
+# 以脚本触发时间为基准，向前计算6小时
+CURRENT_TIMESTAMP=$(date +%s)
+SINCE_TIMESTAMP=$((CURRENT_TIMESTAMP - 21600))  # 6小时 = 6 * 3600 = 21600秒
+
+echo "🕐 基于脚本触发时间的检测范围:"
+echo "   脚本触发时间: $(date -d "@$CURRENT_TIMESTAMP" --iso-8601)"
+echo "   检测起始时间: $(date -d "@$SINCE_TIMESTAMP" --iso-8601) (向前6小时)"
+echo "   使用Unix时间戳格式，避免时区问题"
 
 # 调试：显示最近的所有提交（包括合并提交）
 echo "🔍 最近10个提交（包括合并）:"
@@ -19,21 +21,12 @@ git log -10 --oneline --pretty=format:"%h %s (%an, %ad)" --date=iso
 echo "🔍 最近10个非合并提交:"
 git log -10 --oneline --no-merges --pretty=format:"%h %s (%an, %ad)" --date=iso
 
-# 调试：显示6小时内的所有提交（包括合并）
-echo "🔍 6小时内的所有提交（包括合并）:"
-echo "   搜索条件: --since=\"$SINCE_TIME\""
-git log --since="$SINCE_TIME" --oneline --pretty=format:"%h %s (%an, %ad)" --date=iso
-
-# 调试：显示最新提交的详细时间信息
-echo "🕐 最新提交的时间信息:"
-LATEST_COMMIT_TIME=$(git log -1 --pretty=format:"%ad" --date=iso)
-LATEST_COMMIT_TIME_UTC=$(git log -1 --pretty=format:"%ad" --date=iso-strict)
-echo "   最新提交时间: $LATEST_COMMIT_TIME"
-echo "   最新提交时间(UTC): $LATEST_COMMIT_TIME_UTC"
-echo "   检测起始时间: $SINCE_TIME"
+# 调试：显示基于最新提交时间的6小时内提交
+echo "🔍 6小时内的所有提交（使用@时间戳格式）:"
+git log --since="@$SINCE_TIMESTAMP" --oneline --pretty=format:"%h %s (%an, %ad)" --date=iso
 
 # 获取6小时内的所有提交（包括合并提交和PR）
-NEW_COMMITS=$(git log --since="$SINCE_TIME" --oneline \
+NEW_COMMITS=$(git log --since="@$SINCE_TIMESTAMP" --oneline \
   --pretty=format:"%h|%s|%an|%ad" --date=short)
 
 # 修复COMMIT_COUNT计算，确保是纯数字
@@ -45,10 +38,11 @@ fi
 
 echo "📊 6小时内发现 $COMMIT_COUNT 个提交"
 
-# 调试：如果没有找到提交，尝试不同的时间范围
+# 调试：如果没有找到提交，尝试扩大时间范围
 if [ "$COMMIT_COUNT" -eq 0 ]; then
   echo "🔍 扩大搜索范围到24小时:"
-  RECENT_COMMITS=$(git log --since="24 hours ago" --oneline --no-merges \
+  EXTENDED_TIMESTAMP=$((CURRENT_TIMESTAMP - 86400))  # 24小时 = 86400秒
+  RECENT_COMMITS=$(git log --since="@$EXTENDED_TIMESTAMP" --oneline --no-merges \
     --pretty=format:"%h %s (%an, %ad)" --date=iso | head -5)
   echo "$RECENT_COMMITS"
 fi
@@ -81,8 +75,8 @@ if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ] && [ "$COMMIT_COUNT" -eq 10 ];
     --pretty=format:"COMMIT:%h %s")
   FILES_CHANGED=$(git diff --name-only HEAD~10 HEAD 2>/dev/null || echo "")
 else
-  # 真实模式：获取6小时内的统计
-  DETAILED_STATS=$(git log --since="$SINCE_TIME" --no-merges --stat \
+  # 真实模式：获取6小时内的统计（使用Unix时间戳）
+  DETAILED_STATS=$(git log --since="@$SINCE_TIMESTAMP" --no-merges --stat \
     --pretty=format:"COMMIT:%h %s")
   FILES_CHANGED=$(git diff --name-only HEAD~$COMMIT_COUNT HEAD \
     2>/dev/null || echo "")
