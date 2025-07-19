@@ -160,9 +160,9 @@ if [ -n "$AI_API_KEY" ]; then
     -d "$API_REQUEST")
 
   # 调试：显示API响应
-  echo "🔍 API响应调试信息:"
-  echo "响应长度: $(echo "$AI_RESPONSE" | wc -c)"
-  echo "响应前200字符: $(echo "$AI_RESPONSE" | head -c 200)"
+  echo "🔍 AI API完整响应:"
+  echo "$AI_RESPONSE"
+  echo "📏 响应长度: $(echo "$AI_RESPONSE" | wc -c) 字符"
 
   # 解析AI响应
   AI_CONTENT=$(echo "$AI_RESPONSE" | \
@@ -175,6 +175,8 @@ if [ -n "$AI_API_KEY" ]; then
   if [ -n "$AI_CONTENT" ] && [ "$AI_CONTENT" != "null" ] && [ "$AI_CONTENT" != "" ]; then
     echo "✅ AI分析成功"
     echo "📝 AI响应长度: $(echo "$AI_CONTENT" | wc -c) 字符"
+    echo "🤖 AI解析后的内容:"
+    echo "$AI_CONTENT"
   else
     echo "❌ AI分析失败，内容为空"
     echo "完整API响应: $AI_RESPONSE"
@@ -261,14 +263,22 @@ EOFMSG
 # 替换变量
 MESSAGE=$(envsubst < /tmp/message.txt)
 
+# 调试：显示最终构建的消息
+echo "📝 最终构建的通知消息:"
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo "$MESSAGE"
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
 # 发送到Webhook
 if [ -n "$WECHAT_WEBHOOK_URL" ]; then
   echo "🌐 发送通知到Webhook..."
 
-  # 构建通用的JSON payload
+  # 构建企业微信专用的JSON payload
   PAYLOAD=$(jq -n --arg text "$MESSAGE" '{
-    text: $text,
-    content: $text
+    msgtype: "text",
+    text: {
+      content: $text
+    }
   }')
 
   # 发送请求
@@ -283,6 +293,7 @@ if [ -n "$WECHAT_WEBHOOK_URL" ]; then
 
   if [ "$HTTP_STATUS" -ge 200 ] && [ "$HTTP_STATUS" -lt 300 ]; then
     echo "✅ 通知发送成功 (HTTP $HTTP_STATUS)"
+    echo "📋 企业微信API响应: $(cat /tmp/webhook_response.txt)"
   else
     echo "❌ 通知发送失败 (HTTP $HTTP_STATUS)"
     echo "响应内容: $(cat /tmp/webhook_response.txt)"
