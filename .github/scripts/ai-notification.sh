@@ -8,7 +8,13 @@ echo "🔍 开始检测代码变更..."
 SINCE_TIME=$(date -d "6 hours ago" --iso-8601)
 NEW_COMMITS=$(git log --since="$SINCE_TIME" --oneline --no-merges \
   --pretty=format:"%h|%s|%an|%ad" --date=short)
-COMMIT_COUNT=$(echo "$NEW_COMMITS" | grep -c . || echo "0")
+
+# 修复COMMIT_COUNT计算，确保是纯数字
+if [ -z "$NEW_COMMITS" ]; then
+  COMMIT_COUNT=0
+else
+  COMMIT_COUNT=$(echo "$NEW_COMMITS" | wc -l)
+fi
 
 echo "📊 6小时内发现 $COMMIT_COUNT 个提交"
 
@@ -60,6 +66,12 @@ while IFS='|' read -r hash message author date; do
   fi
 done <<< "$COMMITS_DATA"
 
+# 计算文件变更数量
+FILES_COUNT=$(echo "$FILES_CHANGED" | wc -l)
+if [ -z "$FILES_CHANGED" ]; then
+  FILES_COUNT=0
+fi
+
 # 构建AI提示词
 AI_PROMPT="你是MoonTV项目的技术更新分析专家。MoonTV是一个基于Next.js 14的现代化影视聚合播放器，支持多源搜索、在线播放、收藏同步等功能。
 
@@ -72,13 +84,13 @@ AI_PROMPT="你是MoonTV项目的技术更新分析专家。MoonTV是一个基于
 本次变更概览：
 - 数据来源：${DATA_SOURCE}
 - 提交数量：${COMMIT_COUNT}个
-- 变更文件：$(echo "$FILES_CHANGED" | wc -l)个
+- 变更文件：${FILES_COUNT}个
 
 详细提交记录：
-$(echo -e "$FORMATTED_COMMITS")
+${FORMATTED_COMMITS}
 
 文件变更统计：
-$DETAILED_STATS
+${DETAILED_STATS}
 
 请按以下JSON格式输出分析结果：
 {
@@ -109,6 +121,9 @@ if [ -n "$AI_API_KEY" ]; then
   AI_API_ENDPOINT="${AI_API_ENDPOINT:-https://api.openai.com/v1/chat/completions}"
   AI_MODEL="${AI_MODEL:-gpt-3.5-turbo}"
 
+  # 调试：显示提示词长度
+  echo "🔍 AI提示词长度: $(echo "$AI_PROMPT" | wc -c) 字符"
+
   # 构建API请求
   API_REQUEST=$(jq -n \
     --arg model "$AI_MODEL" \
@@ -129,11 +144,24 @@ if [ -n "$AI_API_KEY" ]; then
       temperature: 0.7
     }')
 
+  # 调试：检查API请求是否构建成功
+  if [ $? -eq 0 ]; then
+    echo "✅ API请求构建成功"
+  else
+    echo "❌ API请求构建失败"
+    exit 1
+  fi
+
   # 调用AI API
   AI_RESPONSE=$(curl -s -X POST "$AI_API_ENDPOINT" \
     -H "Authorization: Bearer $AI_API_KEY" \
     -H "Content-Type: application/json" \
     -d "$API_REQUEST")
+
+  # 调试：显示API响应
+  echo "🔍 API响应调试信息:"
+  echo "响应长度: $(echo "$AI_RESPONSE" | wc -c)"
+  echo "响应前200字符: $(echo "$AI_RESPONSE" | head -c 200)"
 
   # 解析AI响应
   AI_CONTENT=$(echo "$AI_RESPONSE" | \
@@ -143,6 +171,14 @@ if [ -n "$AI_API_KEY" ]; then
     echo "✅ AI分析成功"
   else
     echo "❌ AI分析失败，API响应异常"
+    echo "完整API响应: $AI_RESPONSE"
+
+    # 检查是否有错误信息
+    ERROR_MSG=$(echo "$AI_RESPONSE" | jq -r '.error.message' 2>/dev/null || echo "")
+    if [ -n "$ERROR_MSG" ] && [ "$ERROR_MSG" != "null" ]; then
+      echo "API错误信息: $ERROR_MSG"
+    fi
+
     exit 1
   fi
 else
