@@ -6,7 +6,23 @@ echo "🔍 开始检测代码变更..."
 
 # 检测6小时内的变更
 SINCE_TIME=$(date -d "6 hours ago" --iso-8601)
-NEW_COMMITS=$(git log --since="$SINCE_TIME" --oneline --no-merges \
+echo "🕐 检测时间范围: $SINCE_TIME 至今"
+echo "🌍 当前时区: $(date '+%Z %z')"
+
+# 调试：显示最近的所有提交（包括合并提交）
+echo "🔍 最近10个提交（包括合并）:"
+git log -10 --oneline --pretty=format:"%h %s (%an, %ad)" --date=iso
+
+# 调试：显示最近的非合并提交
+echo "🔍 最近10个非合并提交:"
+git log -10 --oneline --no-merges --pretty=format:"%h %s (%an, %ad)" --date=iso
+
+# 调试：显示6小时内的所有提交（包括合并）
+echo "🔍 6小时内的所有提交（包括合并）:"
+git log --since="$SINCE_TIME" --oneline --pretty=format:"%h %s (%an, %ad)" --date=iso
+
+# 获取6小时内的所有提交（包括合并提交和PR）
+NEW_COMMITS=$(git log --since="$SINCE_TIME" --oneline \
   --pretty=format:"%h|%s|%an|%ad" --date=short)
 
 # 修复COMMIT_COUNT计算，确保是纯数字
@@ -18,6 +34,14 @@ fi
 
 echo "📊 6小时内发现 $COMMIT_COUNT 个提交"
 
+# 调试：如果没有找到提交，尝试不同的时间范围
+if [ "$COMMIT_COUNT" -eq 0 ]; then
+  echo "🔍 扩大搜索范围到24小时:"
+  RECENT_COMMITS=$(git log --since="24 hours ago" --oneline --no-merges \
+    --pretty=format:"%h %s (%an, %ad)" --date=iso | head -5)
+  echo "$RECENT_COMMITS"
+fi
+
 # 判断执行策略
 if [ "$COMMIT_COUNT" -gt 0 ]; then
   # 有6小时内的变更，使用真实数据
@@ -26,13 +50,13 @@ if [ "$COMMIT_COUNT" -gt 0 ]; then
   COMMITS_DATA="$NEW_COMMITS"
   echo "✅ 使用6小时内真实变更数据"
 elif [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ]; then
-  # 手动执行且无6小时内变更，使用最近5次提交作为测试
+  # 手动执行且无6小时内变更，使用最近10次提交作为测试
   MODE="test"
-  DATA_SOURCE="最近5次提交（测试数据）"
-  COMMITS_DATA=$(git log -5 --oneline --no-merges \
+  DATA_SOURCE="最近10次提交（测试数据）"
+  COMMITS_DATA=$(git log -10 --oneline \
     --pretty=format:"%h|%s|%an|%ad" --date=short)
-  COMMIT_COUNT=5
-  echo "🧪 使用最近5次提交作为测试数据"
+  COMMIT_COUNT=10
+  echo "🧪 使用最近10次提交作为测试数据（包括合并提交）"
 else
   # 自动执行且无变更，直接退出
   echo "ℹ️ 未检测到新的代码变更，跳过通知"
@@ -40,11 +64,11 @@ else
 fi
 
 # 获取详细变更统计
-if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ] && [ "$COMMIT_COUNT" -eq 5 ]; then
-  # 测试模式：获取最近5次提交的统计
-  DETAILED_STATS=$(git log -5 --no-merges --stat \
+if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ] && [ "$COMMIT_COUNT" -eq 10 ]; then
+  # 测试模式：获取最近10次提交的统计
+  DETAILED_STATS=$(git log -10 --no-merges --stat \
     --pretty=format:"COMMIT:%h %s")
-  FILES_CHANGED=$(git diff --name-only HEAD~5 HEAD 2>/dev/null || echo "")
+  FILES_CHANGED=$(git diff --name-only HEAD~10 HEAD 2>/dev/null || echo "")
 else
   # 真实模式：获取6小时内的统计
   DETAILED_STATS=$(git log --since="$SINCE_TIME" --no-merges --stat \
