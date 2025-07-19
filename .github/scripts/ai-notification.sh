@@ -168,6 +168,13 @@ if [ -n "$AI_API_KEY" ]; then
   AI_CONTENT=$(echo "$AI_RESPONSE" | \
     jq -r '.choices[0].message.content' 2>/dev/null || echo "")
 
+  # 提取JSON部分（去除markdown代码块）
+  if [[ "$AI_CONTENT" == *"```json"* ]]; then
+    AI_JSON=$(echo "$AI_CONTENT" | sed -n '/```json/,/```/p' | sed '1d;$d')
+  else
+    AI_JSON="$AI_CONTENT"
+  fi
+
   # 检查finish_reason
   FINISH_REASON=$(echo "$AI_RESPONSE" | jq -r '.choices[0].finish_reason' 2>/dev/null || echo "")
   echo "🔍 AI完成原因: $FINISH_REASON"
@@ -215,12 +222,12 @@ while IFS='|' read -r hash message author date; do
 done <<< "$COMMITS_DATA"
 
 # 解析AI分析结果
-if [ -n "$AI_CONTENT" ] && [ "$AI_CONTENT" != "null" ]; then
-  AI_DETAILS=$(echo "$AI_CONTENT" | jq -r '.details[]' 2>/dev/null | \
-    sed 's/^/• /' | tr '\n' '\n' || echo "• AI分析结果解析失败")
-  AI_USER_IMPACT=$(echo "$AI_CONTENT" | jq -r '.user_impact[]' 2>/dev/null | \
-    sed 's/^/• /' | tr '\n' '\n' || echo "• 用户影响分析失败")
-  AI_SUMMARY=$(echo "$AI_CONTENT" | jq -r '.summary' 2>/dev/null || \
+if [ -n "$AI_JSON" ] && [ "$AI_JSON" != "null" ] && [ "$AI_JSON" != "" ]; then
+  AI_DETAILS=$(echo "$AI_JSON" | jq -r '.details[]' 2>/dev/null | \
+    sed 's/^/• /' || echo "• AI分析结果解析失败")
+  AI_USER_IMPACT=$(echo "$AI_JSON" | jq -r '.user_impact[]' 2>/dev/null | \
+    sed 's/^/• /' || echo "• 用户影响分析失败")
+  AI_SUMMARY=$(echo "$AI_JSON" | jq -r '.summary' 2>/dev/null || \
     echo "AI总结生成失败")
 else
   AI_DETAILS="• AI分析数据不可用"
@@ -230,6 +237,18 @@ fi
 
 # 构建通知消息
 CURRENT_TIME=$(date '+%Y/%m/%d %H:%M:%S')
+
+# 导出变量供envsubst使用
+export SITE_NAME CUSTOM_DOMAIN CURRENT_TIME DATA_SOURCE COMMIT_COUNT COMMITS_LIST AI_DETAILS AI_USER_IMPACT AI_SUMMARY
+
+# 调试：显示关键变量
+echo "🔍 关键变量检查:"
+echo "SITE_NAME: $SITE_NAME"
+echo "CURRENT_TIME: $CURRENT_TIME"
+echo "DATA_SOURCE: $DATA_SOURCE"
+echo "COMMIT_COUNT: $COMMIT_COUNT"
+echo "AI_DETAILS长度: $(echo "$AI_DETAILS" | wc -c)"
+echo "AI_SUMMARY长度: $(echo "$AI_SUMMARY" | wc -c)"
 
 cat > /tmp/message.txt << 'EOFMSG'
 🚀 ${SITE_NAME} 更新通知
