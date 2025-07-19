@@ -1,0 +1,37 @@
+name: AI Update Notification
+
+on:
+  workflow_run:
+    workflows: ["Upstream Sync"]
+    types:
+      - completed
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  ai-notification:
+    name: AI分析并发送更新通知
+    runs-on: ubuntu-latest
+    if: ${{ github.event.repository.fork }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: 设置脚本执行权限
+        run: chmod +x .github/scripts/ai-notification.sh
+
+      - name: 执行AI通知脚本
+        env:
+          AI_API_KEY: ${{ secrets.AI_API_KEY }}
+          AI_API_ENDPOINT: ${{ secrets.AI_API_ENDPOINT }}
+          AI_MODEL: ${{ secrets.AI_MODEL }}
+          WECHAT_WEBHOOK_URL: ${{ secrets.WECHAT_WEBHOOK_URL }}
+          SITE_NAME: ${{ secrets.SITE_NAME }}
+          CUSTOM_DOMAIN: ${{ secrets.CUSTOM_DOMAIN }}
+          GITHUB_EVENT_NAME: ${{ github.event_name }}
+        run: ./.github/scripts/ai-notification.sh
