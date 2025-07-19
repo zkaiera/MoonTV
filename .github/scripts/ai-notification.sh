@@ -5,9 +5,11 @@ set -e
 echo "🔍 开始检测代码变更..."
 
 # 检测6小时内的变更
-SINCE_TIME=$(date -d "6 hours ago" --iso-8601)
-echo "🕐 检测时间范围: $SINCE_TIME 至今"
+SINCE_TIME=$(date -u -d "6 hours ago" --iso-8601)
+CURRENT_TIME=$(date -u --iso-8601)
+echo "🕐 检测时间范围: $SINCE_TIME 至 $CURRENT_TIME (UTC)"
 echo "🌍 当前时区: $(date '+%Z %z')"
+echo "🔍 使用UTC时间进行检测以避免时区问题"
 
 # 调试：显示最近的所有提交（包括合并提交）
 echo "🔍 最近10个提交（包括合并）:"
@@ -19,7 +21,16 @@ git log -10 --oneline --no-merges --pretty=format:"%h %s (%an, %ad)" --date=iso
 
 # 调试：显示6小时内的所有提交（包括合并）
 echo "🔍 6小时内的所有提交（包括合并）:"
+echo "   搜索条件: --since=\"$SINCE_TIME\""
 git log --since="$SINCE_TIME" --oneline --pretty=format:"%h %s (%an, %ad)" --date=iso
+
+# 调试：显示最新提交的详细时间信息
+echo "🕐 最新提交的时间信息:"
+LATEST_COMMIT_TIME=$(git log -1 --pretty=format:"%ad" --date=iso)
+LATEST_COMMIT_TIME_UTC=$(git log -1 --pretty=format:"%ad" --date=iso-strict)
+echo "   最新提交时间: $LATEST_COMMIT_TIME"
+echo "   最新提交时间(UTC): $LATEST_COMMIT_TIME_UTC"
+echo "   检测起始时间: $SINCE_TIME"
 
 # 获取6小时内的所有提交（包括合并提交和PR）
 NEW_COMMITS=$(git log --since="$SINCE_TIME" --oneline \
@@ -285,15 +296,13 @@ cat > /tmp/message.txt << 'EOFMSG'
 🚀 Vercel将为您自动部署
 🌐 访问 ${CUSTOM_DOMAIN} 查看最新版本
 ━━━━━━━━━━━━━━━
-📊 本次分析 ${COMMIT_COUNT} 个提交
-━━━━━━━━━━━━━━━
-🤖 AI分析  变更详情🔧
+🤖 变更详情 🔧
 ${AI_DETAILS}
 ━━━━━━━━━━━━━━━
-🤖 AI分析 : 用户影响👥
+🤖 用户影响 👥
 ${AI_USER_IMPACT}
 ━━━━━━━━━━━━━━━
-🤖 AI分析 : 总结📝
+🤖 AI总结 📝
 ${AI_SUMMARY}
 EOFMSG
 
