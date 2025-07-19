@@ -169,7 +169,7 @@ if [ -n "$AI_API_KEY" ]; then
     jq -r '.choices[0].message.content' 2>/dev/null || echo "")
 
   # 提取JSON部分（去除markdown代码块）
-  if [[ "$AI_CONTENT" == *"```json"* ]]; then
+  if [[ "$AI_CONTENT" == *'```json'* ]]; then
     AI_JSON=$(echo "$AI_CONTENT" | sed -n '/```json/,/```/p' | sed '1d;$d')
   else
     AI_JSON="$AI_CONTENT"
